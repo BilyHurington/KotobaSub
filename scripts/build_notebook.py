@@ -93,25 +93,49 @@ def main() -> None:
             FALLBACK_TO_WHISPER_TIMESTAMPS = MODEL_CONFIG.fallback_to_whisper_timestamps
             """
         ),
-        markdown_cell("## Upload Input Media"),
+        markdown_cell("## Select Input Media"),
         code_cell(
             """
-            from google.colab import files
             import shutil
 
-            uploaded = files.upload()
+            # Choose "upload" to upload from your computer, or "drive" to read from Google Drive.
+            INPUT_SOURCE = "upload"
 
-            input_paths = []
-            for name in uploaded.keys():
-                src = Path(name)
-                dst = INPUT_DIR / src.name
-                shutil.move(str(src), str(dst))
-                input_paths.append(dst)
+            # Used only when INPUT_SOURCE = "drive".
+            # Example: "/content/drive/MyDrive/videos/sample.mp4"
+            DRIVE_INPUT_PATH = "/content/drive/MyDrive/path/to/your_file.mp4"
 
-            if not input_paths:
-                raise RuntimeError("No input file was uploaded.")
 
-            input_path = input_paths[0]
+            def copy_input_to_workspace(source_path):
+                source_path = Path(source_path)
+                if not source_path.exists():
+                    raise FileNotFoundError(f"Input file does not exist: {source_path}")
+
+                dst = INPUT_DIR / source_path.name
+                if source_path.resolve() != dst.resolve():
+                    shutil.copy2(source_path, dst)
+                return dst
+
+
+            if INPUT_SOURCE == "upload":
+                from google.colab import files
+
+                uploaded = files.upload()
+                if not uploaded:
+                    raise RuntimeError("No input file was uploaded.")
+
+                first_name = next(iter(uploaded.keys()))
+                input_path = copy_input_to_workspace(first_name)
+
+            elif INPUT_SOURCE == "drive":
+                from google.colab import drive
+
+                drive.mount("/content/drive")
+                input_path = copy_input_to_workspace(DRIVE_INPUT_PATH)
+
+            else:
+                raise ValueError('INPUT_SOURCE must be "upload" or "drive".')
+
             print(f"Input: {input_path}")
             """
         ),

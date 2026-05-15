@@ -14,7 +14,9 @@ Colab-oriented workflow for transcribing Japanese video or audio into Japanese S
 1. Open the notebook with the Colab badge above.
 2. Select a GPU runtime in Colab.
 3. Run the cells from top to bottom.
-4. Upload a Japanese video or audio file when prompted.
+4. Choose an input source in the notebook:
+   - `INPUT_SOURCE = "upload"` uploads a file from your computer.
+   - `INPUT_SOURCE = "drive"` mounts Google Drive and reads `DRIVE_INPUT_PATH`.
 5. Download the generated `.ja.srt` file.
 
 The notebook clones this repository inside Colab, installs the required dependencies, transcribes with Kotoba-Whisper, aligns with Qwen3-ForcedAligner, and writes an SRT file. The GitHub repository needs to be public for the Colab link to work for other people without authentication.
