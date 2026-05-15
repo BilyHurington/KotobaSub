@@ -6,14 +6,18 @@ Create a Colab notebook that turns Japanese video or audio into an SRT subtitle 
 
 ## Pipeline
 
-1. Upload or select an input media file.
-2. Extract audio with `ffmpeg` as 16 kHz mono WAV.
-3. Transcribe with `kotoba-tech/kotoba-whisper-v2.2-faster` through `faster-whisper`.
-4. Build a plain Japanese alignment transcript from the ASR output.
-5. Align the transcript to audio with `Qwen/Qwen3-ForcedAligner-0.6B` through the official Qwen3-ASR helper.
-6. Normalize alignment output into timestamped units.
-7. Aggregate timestamped units into readable subtitle segments.
-8. Write and download an SRT file.
+1. Open the notebook through the GitHub-backed Colab link.
+2. Install Colab system tools and clone this project repository into `/content/KotobaSub`.
+3. Install Python dependencies from `requirements-colab.txt`.
+4. Upload or select an input media file.
+5. Extract audio with `ffmpeg` as 16 kHz mono WAV.
+6. Transcribe with `kotoba-tech/kotoba-whisper-v2.2-faster` through `faster-whisper`.
+7. Build a plain Japanese alignment transcript from the ASR output.
+8. Clone Qwen3-ASR into `/content/Qwen3-ASR`.
+9. Align the transcript to audio with `Qwen/Qwen3-ForcedAligner-0.6B` through the official Qwen3-ASR helper.
+10. Normalize alignment output into timestamped units.
+11. Aggregate timestamped units into readable subtitle segments.
+12. Write and download an SRT file.
 
 ## Defaults
 
@@ -30,4 +34,3 @@ This machine does not have an NVIDIA GPU, so local validation should be limited 
 - Import checks for modules that do not require heavyweight model dependencies.
 - Notebook JSON validation.
 - Generated notebook structure review.
-
