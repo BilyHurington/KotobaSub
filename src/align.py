@@ -89,10 +89,24 @@ def run_qwen_alignment_chunked(
         slice_audio_16k_mono(audio_path, chunk_path, slice_start, slice_end)
 
         try:
-            chunk_units = run_qwen_alignment(chunk_path, chunk_text, aligner)
+            raw_result = aligner.align(
+                audio=str(chunk_path),
+                text=chunk_text,
+                language="Japanese",
+            )
+            raw_items = extract_qwen_alignment_items(raw_result)
+            if has_tail_collapse(raw_items, slice_end - slice_start, chunk_end - slice_start):
+                raise ValueError("Qwen alignment collapsed unmatched tail tokens to chunk end")
+
+            chunk_units = normalize_qwen_alignment_result(raw_result)
+            if not chunk_units:
+                raise ValueError("Qwen alignment produced no usable timestamp units")
+
             for unit in chunk_units:
                 global_start = float(unit["start"]) + slice_start
                 global_end = float(unit["end"]) + slice_start
+                if global_end <= global_start:
+                    continue
                 if global_end < chunk_start or global_start > chunk_end:
                     continue
 
@@ -164,6 +178,9 @@ def normalize_qwen_alignment_result(result: Any) -> list[AlignedUnit]:
         if normalized:
             return normalized
 
+    if hasattr(result, "items"):
+        return normalize_qwen_alignment_result(getattr(result, "items"))
+
     if isinstance(result, dict):
         direct = _normalize_list_result([result])
         if direct:
@@ -191,11 +208,16 @@ def _normalize_list_result(items: list[Any]) -> list[AlignedUnit]:
         if start is None or end is None or text is None:
             continue
 
+        start = float(start)
+        end = float(end)
+        if end <= start:
+            continue
+
         text = str(text).strip()
         if not text:
             continue
 
-        normalized.append({"start": float(start), "end": float(end), "text": text})
+        normalized.append({"start": start, "end": end, "text": text})
 
     return normalized
 
@@ -205,9 +227,63 @@ def _flatten_items(items: list[Any] | tuple[Any, ...]) -> list[Any]:
     for item in items:
         if isinstance(item, (list, tuple)):
             flattened.extend(_flatten_items(item))
+        elif hasattr(item, "items"):
+            flattened.extend(_flatten_items(getattr(item, "items")))
         else:
             flattened.append(item)
     return flattened
+
+
+def extract_qwen_alignment_items(result: Any) -> list[Any]:
+    """Extract raw alignment items from Qwen result objects."""
+
+    if result is None:
+        return []
+    if isinstance(result, dict):
+        for key in ("items", "segments", "words", "chars", "tokens", "alignment", "result"):
+            if key in result:
+                return extract_qwen_alignment_items(result[key])
+        return [result]
+    if isinstance(result, (list, tuple)):
+        items: list[Any] = []
+        for item in result:
+            items.extend(extract_qwen_alignment_items(item))
+        return items
+    if hasattr(result, "items"):
+        return extract_qwen_alignment_items(getattr(result, "items"))
+    return [result]
+
+
+def has_tail_collapse(
+    items: list[Any],
+    slice_duration: float,
+    chunk_end_local: float,
+    min_tail_zero_tokens: int = 3,
+    end_tolerance: float = 0.05,
+) -> bool:
+    """Detect Qwen outputs that pin unmatched tail tokens to the audio end."""
+
+    tail_zero_tokens = 0
+    for item in reversed(items):
+        start = _first_present(item, ("start", "start_time", "begin", "begin_time"))
+        end = _first_present(item, ("end", "end_time", "finish", "finish_time"))
+        text = _first_present(item, ("text", "word", "char", "token"))
+
+        if start is None or end is None or text is None:
+            continue
+
+        start = float(start)
+        end = float(end)
+        at_slice_end = abs(end - slice_duration) <= end_tolerance
+        after_chunk_end = end >= chunk_end_local
+
+        if end <= start and (at_slice_end or after_chunk_end):
+            tail_zero_tokens += 1
+            continue
+
+        break
+
+    return tail_zero_tokens >= min_tail_zero_tokens
 
 
 def _empty_cuda_cache() -> None:
