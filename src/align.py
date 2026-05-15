@@ -12,9 +12,19 @@ AlignedUnit = dict[str, float | str]
 def load_qwen_aligner(model_id: str, device: str = "cuda") -> Any:
     """Load the official Qwen3 forced aligner wrapper."""
 
-    from qwen_asr.inference.qwen3_forced_aligner import Qwen3ForcedAligner
+    import torch
+    from qwen_asr import Qwen3ForcedAligner
 
-    return Qwen3ForcedAligner(model_path=model_id, device=device)
+    dtype = torch.bfloat16
+    if device.startswith("cuda") and not torch.cuda.is_bf16_supported():
+        dtype = torch.float16
+
+    device_map = "cuda:0" if device == "cuda" else device
+    return Qwen3ForcedAligner.from_pretrained(
+        model_id,
+        dtype=dtype,
+        device_map=device_map,
+    )
 
 
 def run_qwen_alignment(
@@ -24,7 +34,11 @@ def run_qwen_alignment(
 ) -> list[AlignedUnit]:
     """Run Qwen forced alignment and normalize its output."""
 
-    result = aligner(audio_path=str(audio_path), text=transcript_text)
+    result = aligner.align(
+        audio=str(audio_path),
+        text=transcript_text,
+        language="Japanese",
+    )
     return normalize_qwen_alignment_result(result)
 
 
@@ -34,8 +48,9 @@ def normalize_qwen_alignment_result(result: Any) -> list[AlignedUnit]:
     if result is None:
         raise ValueError("Qwen aligner returned None")
 
-    if isinstance(result, list):
-        normalized = _normalize_list_result(result)
+    if isinstance(result, (list, tuple)):
+        flattened = _flatten_items(result)
+        normalized = _normalize_list_result(flattened)
         if normalized:
             return normalized
 
@@ -59,9 +74,6 @@ def _normalize_list_result(items: list[Any]) -> list[AlignedUnit]:
     normalized: list[AlignedUnit] = []
 
     for item in items:
-        if not isinstance(item, dict):
-            continue
-
         start = _first_present(item, ("start", "start_time", "begin", "begin_time"))
         end = _first_present(item, ("end", "end_time", "finish", "finish_time"))
         text = _first_present(item, ("text", "word", "char", "token"))
@@ -78,9 +90,22 @@ def _normalize_list_result(items: list[Any]) -> list[AlignedUnit]:
     return normalized
 
 
-def _first_present(item: dict[str, Any], keys: tuple[str, ...]) -> Any:
-    for key in keys:
-        if key in item and item[key] is not None:
-            return item[key]
-    return None
+def _flatten_items(items: list[Any] | tuple[Any, ...]) -> list[Any]:
+    flattened: list[Any] = []
+    for item in items:
+        if isinstance(item, (list, tuple)):
+            flattened.extend(_flatten_items(item))
+        else:
+            flattened.append(item)
+    return flattened
 
+
+def _first_present(item: Any, keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if isinstance(item, dict) and key in item and item[key] is not None:
+            return item[key]
+        if hasattr(item, key):
+            value = getattr(item, key)
+            if value is not None:
+                return value
+    return None

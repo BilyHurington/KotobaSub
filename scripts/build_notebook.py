@@ -15,8 +15,6 @@ from src.notebook_builder import build_notebook, code_cell, markdown_cell, write
 OUTPUT_PATH = ROOT / "notebooks" / "Japanese_ASR_Kotoba_QwenAligner.ipynb"
 PROJECT_REPO_URL = "https://github.com/BilyHurington/KotobaSub.git"
 PROJECT_REPO_DIR = Path("/content/KotobaSub")
-QWEN_REPO_URL = "https://github.com/QwenLM/Qwen3-ASR.git"
-QWEN_REPO_DIR = Path("/content/Qwen3-ASR")
 
 
 def main() -> None:
@@ -69,6 +67,11 @@ def main() -> None:
         code_cell(
             """
             !pip install -q -r /content/KotobaSub/requirements-colab.txt
+
+            import importlib.metadata as metadata
+
+            for package_name in ["qwen-asr", "transformers", "faster-whisper"]:
+                print(f"{package_name}: {metadata.version(package_name)}")
             """
         ),
         markdown_cell("## Configure Workspace and Import Helpers"),
@@ -321,19 +324,9 @@ def main() -> None:
             print(alignment_text[:1000])
             """
         ),
-        markdown_cell("## Clone Qwen3-ASR and Align"),
+        markdown_cell("## Load Qwen3-ForcedAligner"),
         code_cell(
-            f"""
-            from pathlib import Path
-            import sys
-
-            QWEN_REPO_DIR = Path("/content/Qwen3-ASR")
-            if not QWEN_REPO_DIR.exists():
-                !git clone --depth 1 {QWEN_REPO_URL} /content/Qwen3-ASR
-
-            if str(QWEN_REPO_DIR) not in sys.path:
-                sys.path.insert(0, str(QWEN_REPO_DIR))
-
+            """
             aligner = load_qwen_aligner(QWEN_ALIGNER_MODEL_ID)
             """
         ),

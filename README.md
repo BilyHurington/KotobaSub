@@ -24,4 +24,6 @@ Colab-oriented workflow for transcribing Japanese video or audio into Japanese S
 
 The notebook clones this repository inside Colab, installs the required dependencies, transcribes with Kotoba-Whisper, aligns with Qwen3-ForcedAligner, and writes an SRT file. The GitHub repository needs to be public for the Colab link to work for other people without authentication.
 
+Qwen alignment is loaded through the official `qwen-asr` Python package, so the notebook does not clone Qwen3-ASR source code directly.
+
 Local checks in this repository cover Python syntax, importability, and notebook JSON validity; full model inference requires a CUDA GPU runtime.
