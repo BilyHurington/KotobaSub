@@ -3,5 +3,6 @@ librosa
 soundfile
 accelerate
 qwen-omni-utils
+ipytree
+ipywidgets
 git+https://github.com/huggingface/transformers
-

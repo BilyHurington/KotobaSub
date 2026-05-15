@@ -96,14 +96,153 @@ def main() -> None:
         markdown_cell("## Select Input Media"),
         code_cell(
             """
-            import shutil
-
             # Choose "upload" to upload from your computer, or "drive" to read from Google Drive.
             INPUT_SOURCE = "upload"
 
             # Used only when INPUT_SOURCE = "drive".
-            # Example: "/content/drive/MyDrive/videos/sample.mp4"
+            # Choose "browse" for an interactive Google Drive file tree, or "path" to paste a path.
+            DRIVE_PICKER_MODE = "browse"
+
+            # Used when DRIVE_PICKER_MODE = "browse".
+            DRIVE_SEARCH_ROOT = "/content/drive/MyDrive"
+
+            # Used when DRIVE_PICKER_MODE = "path".
             DRIVE_INPUT_PATH = "/content/drive/MyDrive/path/to/your_file.mp4"
+
+            SUPPORTED_MEDIA_EXTENSIONS = (
+                ".mp4",
+                ".mkv",
+                ".mov",
+                ".avi",
+                ".webm",
+                ".mp3",
+                ".wav",
+                ".m4a",
+                ".aac",
+                ".flac",
+                ".ogg",
+                ".opus",
+            )
+
+
+            selected_drive_file_path = None
+
+
+            if INPUT_SOURCE == "drive":
+                from google.colab import drive, output
+                from IPython.display import display
+                import ipywidgets as widgets
+                from ipytree import Tree, Node
+
+                drive.mount("/content/drive")
+                output.enable_custom_widget_manager()
+
+                if DRIVE_PICKER_MODE == "browse":
+                    root_path = Path(DRIVE_SEARCH_ROOT)
+                    if not root_path.exists():
+                        raise FileNotFoundError(f"DRIVE_SEARCH_ROOT does not exist: {root_path}")
+
+                    status = widgets.HTML("Select a media file from Google Drive, then click Select.")
+                    selected_label = widgets.HTML("Selected: none")
+                    select_button = widgets.Button(description="Select", button_style="primary")
+                    selected_candidate_path = None
+                    tree = Tree(stripes=True)
+                    root_node = Node(root_path.name, opened=False)
+                    root_node.path = str(root_path)
+                    root_node.is_file = False
+                    tree.add_node(root_node)
+
+
+                    def is_supported_media(path):
+                        return Path(path).suffix.lower() in SUPPORTED_MEDIA_EXTENSIONS
+
+
+                    def populate_node(node):
+                        if getattr(node, "loaded", False):
+                            return
+
+                        node.loaded = True
+                        try:
+                            children = sorted(
+                                Path(node.path).iterdir(),
+                                key=lambda item: (item.is_file(), item.name.lower()),
+                            )
+                        except PermissionError:
+                            return
+
+                        for child in children:
+                            if child.name.startswith("."):
+                                continue
+
+                            if child.is_dir():
+                                child_node = Node(child.name, opened=False)
+                                child_node.path = str(child)
+                                child_node.is_file = False
+                                node.add_node(child_node)
+                                child_node.observe(on_node_opened, "opened")
+                            elif child.is_file() and is_supported_media(child):
+                                child_node = Node(child.name)
+                                child_node.path = str(child)
+                                child_node.is_file = True
+                                node.add_node(child_node)
+                                child_node.observe(on_node_selected, "selected")
+
+
+                    def on_node_opened(change):
+                        if change["new"]:
+                            populate_node(change["owner"])
+
+
+                    def on_node_selected(change):
+                        global selected_candidate_path
+
+                        if not change["new"]:
+                            return
+
+                        selected_node = change["owner"]
+                        if not getattr(selected_node, "is_file", False):
+                            return
+
+                        selected_candidate_path = selected_node.path
+                        selected_label.value = f"Selected: {selected_candidate_path}"
+                        status.value = "File highlighted. Click Select to use it."
+
+
+                    def on_select(_button):
+                        global selected_candidate_path, selected_drive_file_path
+
+                        if not selected_candidate_path:
+                            status.value = "No file selected."
+                            return
+
+                        selected_drive_file_path = selected_candidate_path
+                        selected_label.value = f"Selected: {selected_drive_file_path}"
+                        status.value = "Selection saved. Run the next cell."
+
+
+                    root_node.observe(on_node_opened, "opened")
+                    populate_node(root_node)
+                    select_button.on_click(on_select)
+                    display(status, tree, selected_label, select_button)
+
+                elif DRIVE_PICKER_MODE == "path":
+                    selected_drive_file_path = DRIVE_INPUT_PATH
+                    print(f"Drive input path: {selected_drive_file_path}")
+
+                else:
+                    raise ValueError('DRIVE_PICKER_MODE must be "browse" or "path".')
+
+            elif INPUT_SOURCE == "upload":
+                print("Upload mode selected. Run the next cell and choose a local media file.")
+
+            else:
+                raise ValueError('INPUT_SOURCE must be "upload" or "drive".')
+            """
+        ),
+        markdown_cell("## Load Selected Input"),
+        code_cell(
+            """
+            import shutil
 
 
             def copy_input_to_workspace(source_path):
@@ -128,10 +267,13 @@ def main() -> None:
                 input_path = copy_input_to_workspace(first_name)
 
             elif INPUT_SOURCE == "drive":
-                from google.colab import drive
+                if not selected_drive_file_path:
+                    raise RuntimeError(
+                        "No Google Drive file selected. Run the previous cell, select a media file, "
+                        "click Select, then run this cell again."
+                    )
 
-                drive.mount("/content/drive")
-                input_path = copy_input_to_workspace(DRIVE_INPUT_PATH)
+                input_path = copy_input_to_workspace(selected_drive_file_path)
 
             else:
                 raise ValueError('INPUT_SOURCE must be "upload" or "drive".')
