@@ -55,6 +55,9 @@ def main() -> None:
             REPO_DIR = Path("/content/KotobaSub")
             if not REPO_DIR.exists():
                 !git clone --depth 1 {PROJECT_REPO_URL} /content/KotobaSub
+            else:
+                !git -C /content/KotobaSub fetch origin main
+                !git -C /content/KotobaSub reset --hard origin/main
 
             if str(REPO_DIR) not in sys.path:
                 sys.path.insert(0, str(REPO_DIR))
