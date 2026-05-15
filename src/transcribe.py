@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -124,15 +125,9 @@ def transcribe_audio_chunked(
         if info is None:
             info = chunk_info
 
-        keep_start = start if chunk_index == 0 else start + chunk_overlap / 2
-        keep_end = nominal_end if nominal_end >= duration else nominal_end - chunk_overlap / 2
-
         for segment in chunk_segments:
             global_start = float(segment["start"]) + slice_start
             global_end = float(segment["end"]) + slice_start
-            midpoint = (global_start + global_end) / 2
-            if midpoint < keep_start or midpoint > keep_end:
-                continue
 
             segments.append(
                 {
@@ -150,26 +145,66 @@ def transcribe_audio_chunked(
 
 def merge_near_duplicate_segments(
     segments: list[Segment],
-    max_start_delta: float = 1.0,
+    max_start_delta: float = 4.0,
+    min_text_similarity: float = 0.92,
 ) -> list[Segment]:
-    """Remove obvious duplicates created by overlap windows."""
+    """Remove obvious duplicates created by overlap windows.
+
+    This is intentionally conservative: if two boundary segments are not clearly
+    the same utterance, keep both. Repeated subtitles are easier to fix than
+    missing speech.
+    """
 
     merged: list[Segment] = []
     for segment in sorted(segments, key=lambda item: (float(item["start"]), float(item["end"]))):
         if not str(segment["text"]).strip():
             continue
 
-        if (
-            merged
-            and str(merged[-1]["text"]) == str(segment["text"])
-            and abs(float(merged[-1]["start"]) - float(segment["start"])) <= max_start_delta
-        ):
-            merged[-1]["end"] = max(float(merged[-1]["end"]), float(segment["end"]))
+        duplicate_index = _find_duplicate_segment(
+            merged,
+            segment,
+            max_start_delta=max_start_delta,
+            min_text_similarity=min_text_similarity,
+        )
+        if duplicate_index is not None:
+            existing = merged[duplicate_index]
+            existing["start"] = min(float(existing["start"]), float(segment["start"]))
+            existing["end"] = max(float(existing["end"]), float(segment["end"]))
             continue
 
         merged.append(dict(segment))
 
     return merged
+
+
+def _find_duplicate_segment(
+    candidates: list[Segment],
+    segment: Segment,
+    max_start_delta: float,
+    min_text_similarity: float,
+) -> int | None:
+    segment_text = str(segment["text"]).strip()
+    segment_start = float(segment["start"])
+    segment_end = float(segment["end"])
+
+    for index in range(len(candidates) - 1, max(-1, len(candidates) - 8), -1):
+        candidate = candidates[index]
+        candidate_start = float(candidate["start"])
+        candidate_end = float(candidate["end"])
+
+        if abs(candidate_start - segment_start) > max_start_delta:
+            continue
+
+        overlap = min(candidate_end, segment_end) - max(candidate_start, segment_start)
+        if overlap <= 0:
+            continue
+
+        candidate_text = str(candidate["text"]).strip()
+        similarity = SequenceMatcher(None, candidate_text, segment_text).ratio()
+        if similarity >= min_text_similarity:
+            return index
+
+    return None
 
 
 def build_alignment_text(segments: list[Segment]) -> str:
