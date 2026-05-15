@@ -27,7 +27,7 @@ def main() -> None:
 
             This notebook transcribes Japanese video or audio into a Japanese `.srt` subtitle file.
 
-            - ASR: `kotoba-tech/kotoba-whisper-v2.2-faster`
+            - ASR: `RoachLin/kotoba-whisper-v2.2-faster`
             - Forced alignment: `Qwen/Qwen3-ForcedAligner-0.6B`
 
             The notebook clones this repository automatically, so it can be opened from GitHub and run directly in Colab.
@@ -89,8 +89,13 @@ def main() -> None:
             BEAM_SIZE = MODEL_CONFIG.beam_size
             WHISPER_COMPUTE_TYPES = MODEL_CONFIG.whisper_compute_types
             KOTOBA_MODEL_ID = MODEL_CONFIG.kotoba_model_id
+            KOTOBA_MODEL_CANDIDATES = MODEL_CONFIG.kotoba_model_candidates
             QWEN_ALIGNER_MODEL_ID = MODEL_CONFIG.qwen_aligner_model_id
             FALLBACK_TO_WHISPER_TIMESTAMPS = MODEL_CONFIG.fallback_to_whisper_timestamps
+
+            print("Kotoba-Whisper model candidates:")
+            for model_id in KOTOBA_MODEL_CANDIDATES:
+                print(f"- {model_id}")
             """
         ),
         markdown_cell("## Select Input Media"),
@@ -292,8 +297,8 @@ def main() -> None:
         markdown_cell("## Transcribe with Kotoba-Whisper"),
         code_cell(
             """
-            whisper_model, whisper_compute_type = load_kotoba_model(
-                KOTOBA_MODEL_ID,
+            whisper_model, whisper_compute_type, loaded_kotoba_model_id = load_kotoba_model(
+                KOTOBA_MODEL_CANDIDATES,
                 WHISPER_COMPUTE_TYPES,
             )
 
@@ -307,6 +312,7 @@ def main() -> None:
 
             alignment_text = build_alignment_text(whisper_segments)
             print(f"Detected language: {info.language} ({info.language_probability:.2f})")
+            print(f"Kotoba model: {loaded_kotoba_model_id}")
             print(f"Whisper compute type: {whisper_compute_type}")
             print(f"Whisper segments: {len(whisper_segments)}")
             print(alignment_text[:1000])

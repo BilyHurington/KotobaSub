@@ -10,7 +10,11 @@ from pathlib import Path
 class ModelConfig:
     """Model identifiers and runtime defaults."""
 
-    kotoba_model_id: str = "kotoba-tech/kotoba-whisper-v2.2-faster"
+    kotoba_model_id: str = "RoachLin/kotoba-whisper-v2.2-faster"
+    kotoba_model_candidates: tuple[str, ...] = (
+        "RoachLin/kotoba-whisper-v2.2-faster",
+        "kotoba-tech/kotoba-whisper-v2.0-faster",
+    )
     qwen_aligner_model_id: str = "Qwen/Qwen3-ForcedAligner-0.6B"
     language: str = "ja"
     beam_size: int = 5
@@ -54,4 +58,3 @@ class WorkspaceConfig:
 MODEL_CONFIG = ModelConfig()
 SUBTITLE_CONFIG = SubtitleConfig()
 WORKSPACE_CONFIG = WorkspaceConfig()
-

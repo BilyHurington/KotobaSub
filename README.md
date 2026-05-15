@@ -6,7 +6,8 @@ Colab-oriented workflow for transcribing Japanese video or audio into Japanese S
 
 ## Models
 
-- ASR: `kotoba-tech/kotoba-whisper-v2.2-faster`
+- ASR: `RoachLin/kotoba-whisper-v2.2-faster`
+- ASR fallback: `kotoba-tech/kotoba-whisper-v2.0-faster`
 - Forced alignment: `Qwen/Qwen3-ForcedAligner-0.6B`
 
 ## Quick Start
