@@ -18,9 +18,15 @@ class ModelConfig:
     qwen_aligner_model_id: str = "Qwen/Qwen3-ForcedAligner-0.6B"
     language: str = "ja"
     beam_size: int = 5
-    use_vad: bool = True
+    use_vad: bool = False
     whisper_compute_types: tuple[str, ...] = ("float16", "int8_float16", "int8")
     fallback_to_whisper_timestamps: bool = True
+    use_chunked_transcription: bool = True
+    transcribe_chunk_seconds: float = 30.0
+    transcribe_chunk_overlap: float = 3.0
+    max_align_chunk_seconds: float = 30.0
+    max_align_chunk_chars: int = 300
+    align_chunk_padding: float = 1.0
 
 
 @dataclass(frozen=True)

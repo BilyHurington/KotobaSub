@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .audio import get_media_duration, slice_audio_16k_mono
+
 
 Segment = dict[str, float | str]
 
@@ -66,6 +68,108 @@ def transcribe_audio(
         )
 
     return segments, info
+
+
+def transcribe_audio_chunked(
+    model: Any,
+    audio_path: str | Path,
+    work_dir: str | Path,
+    language: str = "ja",
+    beam_size: int = 5,
+    use_vad: bool = False,
+    chunk_seconds: float = 30.0,
+    chunk_overlap: float = 3.0,
+) -> tuple[list[Segment], Any]:
+    """Transcribe long audio in fixed windows to avoid long-form decode skips."""
+
+    audio_path = Path(audio_path)
+    work_dir = Path(work_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    duration = get_media_duration(audio_path)
+    if duration <= chunk_seconds:
+        return transcribe_audio(
+            model,
+            audio_path,
+            language=language,
+            beam_size=beam_size,
+            use_vad=use_vad,
+        )
+
+    segments: list[Segment] = []
+    info: Any = None
+    step = chunk_seconds
+    chunk_index = 0
+    start = 0.0
+
+    while start < duration:
+        nominal_end = min(duration, start + chunk_seconds)
+        slice_start = max(0.0, start - chunk_overlap)
+        slice_end = min(duration, nominal_end + chunk_overlap)
+        chunk_path = work_dir / f"{audio_path.stem}.chunk_{chunk_index:04d}.wav"
+
+        print(
+            f"Transcribing chunk {chunk_index + 1}: "
+            f"{slice_start:.1f}s - {slice_end:.1f}s"
+        )
+        slice_audio_16k_mono(audio_path, chunk_path, slice_start, slice_end)
+
+        chunk_segments, chunk_info = transcribe_audio(
+            model,
+            chunk_path,
+            language=language,
+            beam_size=beam_size,
+            use_vad=use_vad,
+        )
+        if info is None:
+            info = chunk_info
+
+        keep_start = start if chunk_index == 0 else start + chunk_overlap / 2
+        keep_end = nominal_end if nominal_end >= duration else nominal_end - chunk_overlap / 2
+
+        for segment in chunk_segments:
+            global_start = float(segment["start"]) + slice_start
+            global_end = float(segment["end"]) + slice_start
+            midpoint = (global_start + global_end) / 2
+            if midpoint < keep_start or midpoint > keep_end:
+                continue
+
+            segments.append(
+                {
+                    "start": max(0.0, global_start),
+                    "end": min(duration, global_end),
+                    "text": str(segment["text"]).strip(),
+                }
+            )
+
+        chunk_index += 1
+        start += step
+
+    return merge_near_duplicate_segments(segments), info
+
+
+def merge_near_duplicate_segments(
+    segments: list[Segment],
+    max_start_delta: float = 1.0,
+) -> list[Segment]:
+    """Remove obvious duplicates created by overlap windows."""
+
+    merged: list[Segment] = []
+    for segment in sorted(segments, key=lambda item: (float(item["start"]), float(item["end"]))):
+        if not str(segment["text"]).strip():
+            continue
+
+        if (
+            merged
+            and str(merged[-1]["text"]) == str(segment["text"])
+            and abs(float(merged[-1]["start"]) - float(segment["start"])) <= max_start_delta
+        ):
+            merged[-1]["end"] = max(float(merged[-1]["end"]), float(segment["end"]))
+            continue
+
+        merged.append(dict(segment))
+
+    return merged
 
 
 def build_alignment_text(segments: list[Segment]) -> str:

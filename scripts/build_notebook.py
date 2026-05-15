@@ -99,8 +99,13 @@ def main() -> None:
             """
             from src.config import MODEL_CONFIG, SUBTITLE_CONFIG, WORKSPACE_CONFIG
             from src.audio import ensure_directories, extract_audio_16k_mono, audio_output_path
-            from src.transcribe import load_kotoba_model, transcribe_audio, build_alignment_text
-            from src.align import load_qwen_aligner, run_qwen_alignment
+            from src.transcribe import (
+                load_kotoba_model,
+                transcribe_audio,
+                transcribe_audio_chunked,
+                build_alignment_text,
+            )
+            from src.align import load_qwen_aligner, run_qwen_alignment_chunked
             from src.subtitles import build_subtitles_from_units, write_srt
 
             WORK_DIR = WORKSPACE_CONFIG.root
@@ -118,10 +123,18 @@ def main() -> None:
             KOTOBA_MODEL_CANDIDATES = MODEL_CONFIG.kotoba_model_candidates
             QWEN_ALIGNER_MODEL_ID = MODEL_CONFIG.qwen_aligner_model_id
             FALLBACK_TO_WHISPER_TIMESTAMPS = MODEL_CONFIG.fallback_to_whisper_timestamps
+            USE_CHUNKED_TRANSCRIPTION = MODEL_CONFIG.use_chunked_transcription
+            TRANSCRIBE_CHUNK_SECONDS = MODEL_CONFIG.transcribe_chunk_seconds
+            TRANSCRIBE_CHUNK_OVERLAP = MODEL_CONFIG.transcribe_chunk_overlap
+            MAX_ALIGN_CHUNK_SECONDS = MODEL_CONFIG.max_align_chunk_seconds
+            MAX_ALIGN_CHUNK_CHARS = MODEL_CONFIG.max_align_chunk_chars
+            ALIGN_CHUNK_PADDING = MODEL_CONFIG.align_chunk_padding
 
             print("Kotoba-Whisper model candidates:")
             for model_id in KOTOBA_MODEL_CANDIDATES:
                 print(f"- {model_id}")
+            print(f"Chunked transcription: {USE_CHUNKED_TRANSCRIPTION}")
+            print(f"Transcription chunk: {TRANSCRIBE_CHUNK_SECONDS}s + {TRANSCRIBE_CHUNK_OVERLAP}s overlap")
             """
         ),
         markdown_cell("## Select Input Media"),
@@ -328,13 +341,25 @@ def main() -> None:
                 WHISPER_COMPUTE_TYPES,
             )
 
-            whisper_segments, info = transcribe_audio(
-                whisper_model,
-                audio_path,
-                language=LANGUAGE,
-                beam_size=BEAM_SIZE,
-                use_vad=USE_VAD,
-            )
+            if USE_CHUNKED_TRANSCRIPTION:
+                whisper_segments, info = transcribe_audio_chunked(
+                    whisper_model,
+                    audio_path,
+                    work_dir=AUDIO_DIR / "transcribe_chunks",
+                    language=LANGUAGE,
+                    beam_size=BEAM_SIZE,
+                    use_vad=USE_VAD,
+                    chunk_seconds=TRANSCRIBE_CHUNK_SECONDS,
+                    chunk_overlap=TRANSCRIBE_CHUNK_OVERLAP,
+                )
+            else:
+                whisper_segments, info = transcribe_audio(
+                    whisper_model,
+                    audio_path,
+                    language=LANGUAGE,
+                    beam_size=BEAM_SIZE,
+                    use_vad=USE_VAD,
+                )
 
             alignment_text = build_alignment_text(whisper_segments)
             print(f"Detected language: {info.language} ({info.language_probability:.2f})")
@@ -352,21 +377,17 @@ def main() -> None:
         ),
         code_cell(
             """
-            try:
-                aligned_units = run_qwen_alignment(
-                    audio_path=audio_path,
-                    transcript_text=alignment_text,
-                    aligner=aligner,
-                )
-                used_alignment = "qwen"
-            except Exception as exc:
-                if not FALLBACK_TO_WHISPER_TIMESTAMPS:
-                    raise
-
-                print("Qwen alignment failed. Falling back to Whisper timestamps.")
-                print(repr(exc))
-                aligned_units = whisper_segments
-                used_alignment = "whisper"
+            aligned_units = run_qwen_alignment_chunked(
+                audio_path=audio_path,
+                whisper_segments=whisper_segments,
+                aligner=aligner,
+                work_dir=AUDIO_DIR / "align_chunks",
+                max_chunk_seconds=MAX_ALIGN_CHUNK_SECONDS,
+                max_chunk_chars=MAX_ALIGN_CHUNK_CHARS,
+                chunk_padding=ALIGN_CHUNK_PADDING,
+                fallback_to_whisper=FALLBACK_TO_WHISPER_TIMESTAMPS,
+            )
+            used_alignment = "qwen_chunked"
 
             print(f"Alignment source: {used_alignment}")
             print(f"Aligned units: {len(aligned_units)}")

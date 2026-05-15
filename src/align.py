@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .audio import get_media_duration, slice_audio_16k_mono
+from .transcribe import Segment, build_alignment_text
+
 
 AlignedUnit = dict[str, float | str]
 
@@ -49,6 +52,104 @@ def run_qwen_alignment(
         language="Japanese",
     )
     return normalize_qwen_alignment_result(result)
+
+
+def run_qwen_alignment_chunked(
+    audio_path: str | Path,
+    whisper_segments: list[Segment],
+    aligner: Any,
+    work_dir: str | Path,
+    max_chunk_seconds: float = 30.0,
+    max_chunk_chars: int = 300,
+    chunk_padding: float = 1.0,
+    fallback_to_whisper: bool = True,
+) -> list[AlignedUnit]:
+    """Align in segment-bound chunks to avoid Qwen OOM on long media."""
+
+    audio_path = Path(audio_path)
+    work_dir = Path(work_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    duration = get_media_duration(audio_path)
+
+    aligned: list[AlignedUnit] = []
+    chunks = build_alignment_chunks(whisper_segments, max_chunk_seconds, max_chunk_chars)
+
+    for index, chunk_segments in enumerate(chunks):
+        chunk_start = float(chunk_segments[0]["start"])
+        chunk_end = float(chunk_segments[-1]["end"])
+        slice_start = max(0.0, chunk_start - chunk_padding)
+        slice_end = min(duration, chunk_end + chunk_padding)
+        chunk_text = build_alignment_text(chunk_segments)
+        chunk_path = work_dir / f"{audio_path.stem}.align_{index:04d}.wav"
+
+        print(
+            f"Aligning chunk {index + 1}/{len(chunks)}: "
+            f"{chunk_start:.1f}s - {chunk_end:.1f}s, {len(chunk_text)} chars"
+        )
+        slice_audio_16k_mono(audio_path, chunk_path, slice_start, slice_end)
+
+        try:
+            chunk_units = run_qwen_alignment(chunk_path, chunk_text, aligner)
+            for unit in chunk_units:
+                global_start = float(unit["start"]) + slice_start
+                global_end = float(unit["end"]) + slice_start
+                if global_end < chunk_start or global_start > chunk_end:
+                    continue
+
+                aligned.append(
+                    {
+                        "start": max(chunk_start, global_start),
+                        "end": min(chunk_end, global_end),
+                        "text": str(unit["text"]).strip(),
+                    }
+                )
+        except Exception as exc:
+            if not fallback_to_whisper:
+                raise
+            print(f"Qwen alignment failed for chunk {index + 1}; using Whisper timestamps.")
+            print(repr(exc))
+            aligned.extend(dict(segment) for segment in chunk_segments)
+        finally:
+            _empty_cuda_cache()
+
+    return aligned
+
+
+def build_alignment_chunks(
+    segments: list[Segment],
+    max_chunk_seconds: float,
+    max_chunk_chars: int,
+) -> list[list[Segment]]:
+    """Group Whisper segments without splitting inside a segment."""
+
+    chunks: list[list[Segment]] = []
+    current: list[Segment] = []
+    current_chars = 0
+
+    for segment in segments:
+        if not str(segment.get("text", "")).strip():
+            continue
+
+        segment_chars = len(str(segment["text"]))
+        would_duration = (
+            float(segment["end"]) - float(current[0]["start"])
+            if current
+            else float(segment["end"]) - float(segment["start"])
+        )
+        would_chars = current_chars + segment_chars
+
+        if current and (would_duration > max_chunk_seconds or would_chars > max_chunk_chars):
+            chunks.append(current)
+            current = []
+            current_chars = 0
+
+        current.append(segment)
+        current_chars += segment_chars
+
+    if current:
+        chunks.append(current)
+
+    return chunks
 
 
 def normalize_qwen_alignment_result(result: Any) -> list[AlignedUnit]:
@@ -107,6 +208,16 @@ def _flatten_items(items: list[Any] | tuple[Any, ...]) -> list[Any]:
         else:
             flattened.append(item)
     return flattened
+
+
+def _empty_cuda_cache() -> None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        return
 
 
 def _first_present(item: Any, keys: tuple[str, ...]) -> Any:

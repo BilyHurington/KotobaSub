@@ -26,6 +26,8 @@ The notebook clones this repository inside Colab, installs the required dependen
 
 Qwen alignment is loaded through the official `qwen-asr` Python package, so the notebook does not clone Qwen3-ASR source code directly.
 
+Long audio is transcribed in 30-second chunks with 3 seconds of overlap by default. Qwen alignment also runs in smaller chunks to reduce Colab GPU memory pressure.
+
 If you previously ran an older version of the notebook in the same Colab runtime, restart the runtime before rerunning. This clears stale `/content/Qwen3-ASR` imports.
 
 Local checks in this repository cover Python syntax, importability, and notebook JSON validity; full model inference requires a CUDA GPU runtime.
