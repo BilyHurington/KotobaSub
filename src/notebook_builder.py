@@ -30,25 +30,32 @@ def code_cell(source: str) -> dict[str, Any]:
     }
 
 
-def build_notebook(cells: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build a minimal Colab-compatible notebook document."""
+def build_notebook(cells: list[dict[str, Any]], colab: bool = True) -> dict[str, Any]:
+    """Build a minimal notebook document."""
+
+    metadata: dict[str, Any] = {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "name": "python3",
+        },
+        "language_info": {
+            "name": "python",
+        },
+    }
+    if colab:
+        metadata.update(
+            {
+                "accelerator": "GPU",
+                "colab": {
+                "gpuType": "T4",
+                "provenance": [],
+                },
+            }
+        )
 
     return {
         "cells": cells,
-        "metadata": {
-            "accelerator": "GPU",
-            "colab": {
-                "gpuType": "T4",
-                "provenance": [],
-            },
-            "kernelspec": {
-                "display_name": "Python 3",
-                "name": "python3",
-            },
-            "language_info": {
-                "name": "python",
-            },
-        },
+        "metadata": metadata,
         "nbformat": 4,
         "nbformat_minor": 5,
     }

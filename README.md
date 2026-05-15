@@ -31,3 +31,39 @@ Long audio is transcribed in 30-second chunks with 3 seconds of overlap by defau
 If you previously ran an older version of the notebook in the same Colab runtime, restart the runtime before rerunning. This clears stale `/content/Qwen3-ASR` imports.
 
 Local checks in this repository cover Python syntax, importability, and notebook JSON validity; full model inference requires a CUDA GPU runtime.
+
+## Generic Server Notebook
+
+For a normal Jupyter server, use:
+
+```text
+notebooks/Japanese_ASR_Kotoba_QwenAligner_Server.ipynb
+```
+
+Install `ffmpeg` on the host, then install PyTorch for your CUDA runtime:
+
+```bash
+# CUDA 12.4
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# CUDA 12.1
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# CPU fallback
+pip install torch torchvision torchaudio
+```
+
+Then install project dependencies:
+
+```bash
+pip install -r requirements-server.txt
+```
+
+The server notebook uses local paths:
+
+```python
+INPUT_PATH = Path("/path/to/input.mp4")
+OUTPUT_PATH = Path("./output.ja.srt")
+```
+
+Qwen forced alignment is intended for CUDA GPU servers. Without CUDA, the server notebook can still produce SRT files from Whisper timestamps by setting `USE_QWEN_ALIGNMENT = False`.

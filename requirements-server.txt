@@ -1,0 +1,7 @@
+faster-whisper
+librosa
+soundfile
+accelerate
+qwen-omni-utils
+qwen-asr
+
