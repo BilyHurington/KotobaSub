@@ -13,7 +13,16 @@ def load_qwen_aligner(model_id: str, device: str = "cuda") -> Any:
     """Load the official Qwen3 forced aligner wrapper."""
 
     import torch
-    from qwen_asr import Qwen3ForcedAligner
+    try:
+        from qwen_asr import Qwen3ForcedAligner
+    except KeyError as exc:
+        if str(exc).strip("'\"") == "qwen_asr":
+            raise RuntimeError(
+                "Failed to import qwen_asr because this Colab runtime still has a stale "
+                "Qwen3-ASR import path/cache. Restart the Colab runtime, then run the "
+                "notebook from the first cell."
+            ) from exc
+        raise
 
     dtype = torch.bfloat16
     if device.startswith("cuda") and not torch.cuda.is_bf16_supported():

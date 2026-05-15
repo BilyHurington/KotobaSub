@@ -68,10 +68,30 @@ def main() -> None:
             """
             !pip install -q -r /content/KotobaSub/requirements-colab.txt
 
+            import importlib
             import importlib.metadata as metadata
+            import sys
+
+            # Older versions of this notebook cloned Qwen3-ASR into /content/Qwen3-ASR.
+            # Remove that source checkout from imports so the official qwen-asr package is used.
+            sys.path = [path for path in sys.path if path != "/content/Qwen3-ASR"]
+            for module_name in list(sys.modules):
+                if module_name == "qwen_asr" or module_name.startswith("qwen_asr."):
+                    del sys.modules[module_name]
+            importlib.invalidate_caches()
 
             for package_name in ["qwen-asr", "transformers", "faster-whisper"]:
                 print(f"{package_name}: {metadata.version(package_name)}")
+
+            try:
+                import qwen_asr
+
+                print(f"qwen_asr import path: {qwen_asr.__file__}")
+            except Exception as exc:
+                raise RuntimeError(
+                    "qwen_asr is installed but could not be imported cleanly. "
+                    "Restart the Colab runtime, then run the notebook from the first cell."
+                ) from exc
             """
         ),
         markdown_cell("## Configure Workspace and Import Helpers"),
