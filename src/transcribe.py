@@ -79,9 +79,15 @@ def transcribe_audio_chunked(
     beam_size: int = 5,
     use_vad: bool = False,
     chunk_seconds: float = 30.0,
-    chunk_overlap: float = 3.0,
+    chunk_overlap: float = 10.0,
 ) -> tuple[list[Segment], Any]:
-    """Transcribe long audio in fixed windows to avoid long-form decode skips."""
+    """Transcribe long audio in fixed core windows with extra context.
+
+    The model sees overlap before and after each core chunk, but only segments
+    whose midpoint falls inside the core interval are kept. This gives Whisper
+    enough context at chunk boundaries without turning the overlap into
+    duplicated transcript output.
+    """
 
     audio_path = Path(audio_path)
     work_dir = Path(work_dir)
@@ -104,14 +110,16 @@ def transcribe_audio_chunked(
     start = 0.0
 
     while start < duration:
-        nominal_end = min(duration, start + chunk_seconds)
-        slice_start = max(0.0, start - chunk_overlap)
-        slice_end = min(duration, nominal_end + chunk_overlap)
+        core_start = start
+        core_end = min(duration, start + chunk_seconds)
+        slice_start = max(0.0, core_start - chunk_overlap)
+        slice_end = min(duration, core_end + chunk_overlap)
         chunk_path = work_dir / f"{audio_path.stem}.chunk_{chunk_index:04d}.wav"
 
         print(
             f"Transcribing chunk {chunk_index + 1}: "
-            f"{slice_start:.1f}s - {slice_end:.1f}s"
+            f"{core_start:.1f}s - {core_end:.1f}s core, "
+            f"{slice_start:.1f}s - {slice_end:.1f}s context"
         )
         slice_audio_16k_mono(audio_path, chunk_path, slice_start, slice_end)
 
@@ -128,6 +136,10 @@ def transcribe_audio_chunked(
         for segment in chunk_segments:
             global_start = float(segment["start"]) + slice_start
             global_end = float(segment["end"]) + slice_start
+            midpoint = (global_start + global_end) / 2.0
+            is_last_chunk = core_end >= duration
+            if midpoint < core_start or (midpoint >= core_end and not is_last_chunk):
+                continue
 
             segments.append(
                 {

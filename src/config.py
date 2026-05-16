@@ -23,7 +23,7 @@ class ModelConfig:
     fallback_to_whisper_timestamps: bool = True
     use_chunked_transcription: bool = True
     transcribe_chunk_seconds: float = 30.0
-    transcribe_chunk_overlap: float = 3.0
+    transcribe_chunk_overlap: float = 10.0
     max_align_chunk_seconds: float = 30.0
     max_align_chunk_chars: int = 300
     align_chunk_padding: float = 1.0

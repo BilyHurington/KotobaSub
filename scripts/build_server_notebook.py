@@ -128,7 +128,7 @@ def main() -> None:
 
             USE_CHUNKED_TRANSCRIPTION = True
             TRANSCRIBE_CHUNK_SECONDS = 30.0
-            TRANSCRIBE_CHUNK_OVERLAP = 3.0
+            TRANSCRIBE_CHUNK_OVERLAP = 10.0
 
             USE_QWEN_ALIGNMENT = True
             FALLBACK_TO_WHISPER_TIMESTAMPS = True

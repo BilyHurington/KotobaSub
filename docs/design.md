@@ -20,7 +20,7 @@ Create a Colab notebook that turns Japanese video or audio into an SRT subtitle 
 
 ## Defaults
 
-- Use 30-second Whisper transcription chunks with 3 seconds of audio overlap.
+- Use 30-second Whisper transcription core chunks with 10 seconds of audio context on each side.
 - Disable VAD by default for chunked transcription because it may skip long sections.
 - Prefer the v2.2 CTranslate2 conversion at `RoachLin/kotoba-whisper-v2.2-faster`.
 - Fall back to the official `kotoba-tech/kotoba-whisper-v2.0-faster` if needed.
