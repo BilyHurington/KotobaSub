@@ -128,13 +128,15 @@ def main() -> None:
             TRANSCRIBE_CHUNK_OVERLAP = MODEL_CONFIG.transcribe_chunk_overlap
             MAX_ALIGN_CHUNK_SECONDS = MODEL_CONFIG.max_align_chunk_seconds
             MAX_ALIGN_CHUNK_CHARS = MODEL_CONFIG.max_align_chunk_chars
-            ALIGN_CHUNK_PADDING = MODEL_CONFIG.align_chunk_padding
+            ALIGN_CONTEXT_LEFT = MODEL_CONFIG.align_context_left
+            ALIGN_CONTEXT_RIGHT = MODEL_CONFIG.align_context_right
 
             print("Kotoba-Whisper model candidates:")
             for model_id in KOTOBA_MODEL_CANDIDATES:
                 print(f"- {model_id}")
             print(f"Chunked transcription: {USE_CHUNKED_TRANSCRIPTION}")
             print(f"Transcription chunk: {TRANSCRIBE_CHUNK_SECONDS}s + {TRANSCRIBE_CHUNK_OVERLAP}s overlap")
+            print(f"Alignment context: -{ALIGN_CONTEXT_LEFT}s / +{ALIGN_CONTEXT_RIGHT}s")
             """
         ),
         markdown_cell("## Select Input Media"),
@@ -384,7 +386,8 @@ def main() -> None:
                 work_dir=AUDIO_DIR / "align_chunks",
                 max_chunk_seconds=MAX_ALIGN_CHUNK_SECONDS,
                 max_chunk_chars=MAX_ALIGN_CHUNK_CHARS,
-                chunk_padding=ALIGN_CHUNK_PADDING,
+                context_left=ALIGN_CONTEXT_LEFT,
+                context_right=ALIGN_CONTEXT_RIGHT,
                 fallback_to_whisper=FALLBACK_TO_WHISPER_TIMESTAMPS,
             )
             used_alignment = "qwen_chunked"

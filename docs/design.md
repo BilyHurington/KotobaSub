@@ -26,6 +26,7 @@ Create a Colab notebook that turns Japanese video or audio into an SRT subtitle 
 - Fall back to the official `kotoba-tech/kotoba-whisper-v2.0-faster` if needed.
 - Use CUDA and try `float16`, then `int8_float16`, then `int8`.
 - Align with Qwen in bounded chunks to avoid long-audio OOM failures.
+- Give Qwen 5 seconds of left context and 10 seconds of right context, then keep only tokens fully inside the core chunk.
 - Do not use LLM cleanup in the first implementation.
 - Fall back to Kotoba-Whisper timestamps if Qwen alignment fails.
 - Default to local upload input, with optional Google Drive browsing through `ipytree`.

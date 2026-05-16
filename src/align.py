@@ -61,62 +61,84 @@ def run_qwen_alignment_chunked(
     work_dir: str | Path,
     max_chunk_seconds: float = 30.0,
     max_chunk_chars: int = 300,
-    chunk_padding: float = 1.0,
+    chunk_padding: float | None = 1.0,
+    context_left: float | None = None,
+    context_right: float | None = None,
     fallback_to_whisper: bool = True,
 ) -> list[AlignedUnit]:
-    """Align in segment-bound chunks to avoid Qwen OOM on long media."""
+    """Align in segment-bound chunks to avoid Qwen OOM on long media.
+
+    Each core chunk is aligned with extra audio and transcript context, but
+    only tokens fully inside the core chunk are emitted. This gives Qwen enough
+    context for sentences crossing chunk boundaries without duplicating output.
+    """
 
     audio_path = Path(audio_path)
     work_dir = Path(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
     duration = get_media_duration(audio_path)
+    if context_left is None:
+        context_left = float(chunk_padding or 0.0)
+    if context_right is None:
+        context_right = float(chunk_padding or 0.0)
 
     aligned: list[AlignedUnit] = []
     chunks = build_alignment_chunks(whisper_segments, max_chunk_seconds, max_chunk_chars)
 
     for index, chunk_segments in enumerate(chunks):
-        chunk_start = float(chunk_segments[0]["start"])
-        chunk_end = float(chunk_segments[-1]["end"])
-        slice_start = max(0.0, chunk_start - chunk_padding)
-        slice_end = min(duration, chunk_end + chunk_padding)
-        chunk_text = build_alignment_text(chunk_segments)
+        core_start = float(chunk_segments[0]["start"])
+        core_end = float(chunk_segments[-1]["end"])
+        slice_start = max(0.0, core_start - context_left)
+        slice_end = min(duration, core_end + context_right)
+        context_segments = select_segments_overlapping(whisper_segments, slice_start, slice_end)
+        context_text = build_alignment_text(context_segments)
         chunk_path = work_dir / f"{audio_path.stem}.align_{index:04d}.wav"
 
         print(
             f"Aligning chunk {index + 1}/{len(chunks)}: "
-            f"{chunk_start:.1f}s - {chunk_end:.1f}s, {len(chunk_text)} chars"
+            f"{core_start:.1f}s - {core_end:.1f}s core, "
+            f"{slice_start:.1f}s - {slice_end:.1f}s context, {len(context_text)} chars"
         )
         slice_audio_16k_mono(audio_path, chunk_path, slice_start, slice_end)
 
         try:
             raw_result = aligner.align(
                 audio=str(chunk_path),
-                text=chunk_text,
+                text=context_text,
                 language="Japanese",
             )
             raw_items = extract_qwen_alignment_items(raw_result)
-            if has_tail_collapse(raw_items, slice_end - slice_start, chunk_end - slice_start):
-                raise ValueError("Qwen alignment collapsed unmatched tail tokens to chunk end")
+            if has_tail_collapse(raw_items, slice_end - slice_start, core_end - slice_start):
+                print(
+                    f"Qwen alignment has collapsed tail tokens for chunk {index + 1}; "
+                    "keeping valid core tokens only."
+                )
 
             chunk_units = normalize_qwen_alignment_result(raw_result)
             if not chunk_units:
                 raise ValueError("Qwen alignment produced no usable timestamp units")
 
+            core_units: list[AlignedUnit] = []
             for unit in chunk_units:
                 global_start = float(unit["start"]) + slice_start
                 global_end = float(unit["end"]) + slice_start
                 if global_end <= global_start:
                     continue
-                if global_end < chunk_start or global_start > chunk_end:
+                if global_start < core_start or global_end > core_end:
                     continue
 
-                aligned.append(
+                core_units.append(
                     {
-                        "start": max(chunk_start, global_start),
-                        "end": min(chunk_end, global_end),
+                        "start": global_start,
+                        "end": global_end,
                         "text": str(unit["text"]).strip(),
                     }
                 )
+
+            if not core_units:
+                raise ValueError("Qwen alignment produced no usable core timestamp units")
+
+            aligned.extend(core_units)
         except Exception as exc:
             if not fallback_to_whisper:
                 raise
@@ -164,6 +186,26 @@ def build_alignment_chunks(
         chunks.append(current)
 
     return chunks
+
+
+def select_segments_overlapping(
+    segments: list[Segment],
+    start: float,
+    end: float,
+) -> list[Segment]:
+    """Return non-empty segments that overlap an audio interval."""
+
+    selected: list[Segment] = []
+    for segment in segments:
+        if not str(segment.get("text", "")).strip():
+            continue
+        segment_start = float(segment["start"])
+        segment_end = float(segment["end"])
+        if segment_end < start or segment_start > end:
+            continue
+        selected.append(segment)
+
+    return selected
 
 
 def normalize_qwen_alignment_result(result: Any) -> list[AlignedUnit]:

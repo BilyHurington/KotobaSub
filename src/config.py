@@ -27,6 +27,8 @@ class ModelConfig:
     max_align_chunk_seconds: float = 30.0
     max_align_chunk_chars: int = 300
     align_chunk_padding: float = 1.0
+    align_context_left: float = 5.0
+    align_context_right: float = 10.0
 
 
 @dataclass(frozen=True)

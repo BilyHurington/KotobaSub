@@ -134,7 +134,8 @@ def main() -> None:
             FALLBACK_TO_WHISPER_TIMESTAMPS = True
             MAX_ALIGN_CHUNK_SECONDS = 30.0
             MAX_ALIGN_CHUNK_CHARS = 300
-            ALIGN_CHUNK_PADDING = 1.0
+            ALIGN_CONTEXT_LEFT = 5.0
+            ALIGN_CONTEXT_RIGHT = 10.0
 
             DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -208,7 +209,8 @@ def main() -> None:
                     work_dir=AUDIO_DIR / "align_chunks",
                     max_chunk_seconds=MAX_ALIGN_CHUNK_SECONDS,
                     max_chunk_chars=MAX_ALIGN_CHUNK_CHARS,
-                    chunk_padding=ALIGN_CHUNK_PADDING,
+                    context_left=ALIGN_CONTEXT_LEFT,
+                    context_right=ALIGN_CONTEXT_RIGHT,
                     fallback_to_whisper=FALLBACK_TO_WHISPER_TIMESTAMPS,
                 )
                 used_alignment = "qwen_chunked"
